@@ -5,7 +5,7 @@ import os
 # ----------------- 設定 -----------------
 TARGET_URL = "https://komiyamaharuka-fc.jp/"
 # DiscordのURLはGitHubの「Secrets（秘密変数）」から安全に読み込みます
-DISCORD_WEBHOOK_URL = os.environ.get("https://discord.com/api/webhooks/1527007643724415169/DJLwNtD5reQ9DQUDqsxM2LBBXzvd8URtNO8V5HBQq3Npk5zP7H7oXR7CQ5KyzzTEsav6")
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 # ----------------------------------------
 
 def get_page_html():

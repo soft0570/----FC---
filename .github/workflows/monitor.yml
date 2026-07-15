@@ -21,7 +21,7 @@ jobs:
 
     - name: ライブラリのインストール
       run: |
-        pip install requests
+        pip install requests beautifulsoup4
 
     - name: 監視スクリプトを実行
       env:

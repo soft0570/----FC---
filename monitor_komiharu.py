@@ -97,7 +97,7 @@ def main():
     current_hash = hashlib.md5(current_state.encode('utf-8')).hexdigest()
 
     # 前回のハッシュ値を読み込む
-    hash_file = "last_hash.txt"
+    hash_file = "last_hash_komiharu.txt"
     last_hash = ""
     if os.path.exists(hash_file):
         with open(hash_file, "r") as f:

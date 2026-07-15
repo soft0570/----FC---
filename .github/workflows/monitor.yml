@@ -27,7 +27,7 @@ jobs:
       env:
         DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
       run: |
-        python monitor.py
+        python monitor_komiharu.py
         python monitor_hiccorohee.py
 
     - name: 状態(last_hash.txt)の変化を保存してGitHubにコミット

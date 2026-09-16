@@ -31,11 +31,12 @@ jobs:
         python monitor_komiharu.py
         python monitor_hiccorohee.py
         python monitor_ticketdive.py
+        python monitor_test.py
 
     - name: 状態(last_hash.txt)の変化を保存してGitHubにコミット
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git add last_hash_komiharu.txt last_hash_hiccorohee.txt last_hash_ticketdive.txt
+        git add last_hash_komiharu.txt last_hash_hiccorohee.txt last_hash_ticketdive.txt last_hash_test.txt
         # 変更がある場合のみコミットしてプッシュする
         git diff --quiet && git diff --staged --quiet || (git commit -m "Update hashes" && git push)

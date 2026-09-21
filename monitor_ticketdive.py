@@ -29,20 +29,20 @@ def get_page_html():
 
 
 def parse_latest_info(html_content):
-    """TicketDiveのページから最新のイベント情報を抽出する関数."""
+    """TicketDiveのページから本文テキスト全体を抽出する."""
     soup = BeautifulSoup(html_content, "html.parser")
 
-    # ページ全体または主要なコンテンツ部分のテキストを抽出
-    # ※特定のカード要素（.event-card等）があればそちらを優先
-    main_content = soup.find("main") or soup.find("body")
-    if main_content:
-        text_data = main_content.get_text(separator=" ", strip=True)
-    else:
-        text_data = soup.get_text(strip=True)
+    # スクリプトやスタイルなどの不要タグを完全排除
+    for script in soup(["script", "style", "header", "footer", "nav"]):
+        script.extract()
 
-    # 先頭数百文字などを状態ハッシュ比較用の判定用テキストとする
-    latest_text = text_data[:500]
-    return latest_text
+    # ページ内の文字をすべて取り出し、改行やスペースをきれいに整形
+    text = soup.get_text()
+    lines = (line.strip() for line in text.splitlines())
+    chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+    clean_text = "\n".join(chunk for chunk in chunks if chunk)
+
+    return clean_text
 
 
 def send_discord_notification(message):
@@ -64,16 +64,20 @@ def main():
         return
 
     latest_text = parse_latest_info(html_content)
+    if not latest_text.strip():
+        print("テキストの抽出に失敗しました。")
+        return
+
     current_hash = hashlib.md5(latest_text.encode("utf-8")).hexdigest()
 
     last_hash = ""
     if os.path.exists(HASH_FILE):
-        with open(HASH_FILE, "r") as f:
+        with open(HASH_FILE, "r", encoding="utf-8") as f:
             last_hash = f.read().strip()
 
     if not last_hash:
         print("初回実行：TicketDiveの現在の状態を保存します。")
-        with open(HASH_FILE, "w") as f:
+        with open(HASH_FILE, "w", encoding="utf-8") as f:
             f.write(current_hash)
         return
 
@@ -82,13 +86,13 @@ def main():
 
         message = (
             f"🎫 **【TicketDive 更新検知！】** 🎫\n"
-            f"アーティストページでイベント情報等の更新が検出されました！\n\n"
+            f"アーティストページでイベント情報やチケットの更新が検出されました！\n\n"
             f"🔗 **チケットページを開く**:\n{TARGET_URL}"
         )
 
         send_discord_notification(message)
 
-        with open(HASH_FILE, "w") as f:
+        with open(HASH_FILE, "w", encoding="utf-8") as f:
             f.write(current_hash)
     else:
         print("TicketDiveに更新はありませんでした。")

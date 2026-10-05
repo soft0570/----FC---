@@ -1,9 +1,10 @@
-import difflib
+import hashlib
 import os
 import requests
 from bs4 import BeautifulSoup
 
 # ----------------- 監視対象ページの設定 -----------------
+# (識別用ラベル, URL) のリスト
 TARGET_PAGES = [
     ("トップページ", "https://komiyamaharuka-fc.jp/"),
     ("NEWS", "https://komiyamaharuka-fc.jp/news/all/pages/1"),
@@ -12,12 +13,15 @@ TARGET_PAGES = [
     ("PHOTO", "https://komiyamaharuka-fc.jp/photos/all/pages/1"),
     ("BLOG", "https://komiyamaharuka-fc.jp/blogs/all/pages/1"),
     ("TICKET", "https://komiyamaharuka-fc.jp/tickets/all/pages/1"),
-    ("STORE (公式通販)", "https://official-ec.shop/collections/komiyamaharuka-official-store"),
+    (
+        "STORE (公式通販)",
+        "https://official-ec.shop/collections/komiyamaharuka-official-store",
+    ),
     ("PROFILE", "https://komiyamaharuka-fc.jp/page/6jlWE95pVGZbMeCmWO8N1e"),
 ]
 
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
-TEXT_DIR = "last_texts_komiharu"  # 前回のテキスト保存先フォルダ
+HASH_FILE = "last_hash_komiharu.txt"
 # --------------------------------------------------------
 
 
@@ -39,33 +43,15 @@ def get_page_text(url):
                 script.extract()
             text = soup.get_text()
             lines = (line.strip() for line in text.splitlines())
-            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            chunks = (
+                phrase.strip()
+                for line in lines
+                for phrase in line.split("  ")
+            )
             return "\n".join(chunk for chunk in chunks if chunk)
     except Exception as e:
         print(f"URL取得失敗 ({url}): {e}")
     return ""
-
-
-def get_text_diff(old_text, new_text):
-    """前後のテキスト差分（追加行・削除行）を取得する"""
-    old_lines = old_text.splitlines()
-    new_lines = new_text.splitlines()
-
-    diff = difflib.unified_diff(old_lines, new_lines, lineterm="")
-    added = []
-    removed = []
-
-    for line in diff:
-        if line.startswith("+") and not line.startswith("+++"):
-            content = line[1:].strip()
-            if content:
-                added.append(content)
-        elif line.startswith("-") and not line.startswith("---"):
-            content = line[1:].strip()
-            if content:
-                removed.append(content)
-
-    return added, removed
 
 
 def send_discord_notification(message):
@@ -81,60 +67,66 @@ def main():
         print("エラー: DISCORD_WEBHOOK_URL が設定されていません。")
         return
 
-    # テキスト保存用フォルダの作成
-    os.makedirs(TEXT_DIR, exist_ok=True)
+    # 前回のハッシュ値（各ページぶん）を読み込む
+    last_hashes = {}
+    if os.path.exists(HASH_FILE):
+        with open(HASH_FILE, "r", encoding="utf-8") as f:
+            content = f.read().strip()
+            if content:
+                for item in content.split(","):
+                    if ":" in item:
+                        name, h = item.split(":", 1)
+                        last_hashes[name] = h
 
-    is_first_run = False
-    updated_info = []  # (ページ名, URL, 追加行, 削除行)
+    updated_pages = []
+    current_hashes_list = []
 
+    # 全ページを順番に読み込んでチェック
     for name, url in TARGET_PAGES:
-        current_text = get_page_text(url)
-        if not current_text:
-            continue
+        text = get_page_text(url)
+        current_hash = hashlib.md5(text.encode("utf-8")).hexdigest()
+        current_hashes_list.append(f"{name}:{current_hash}")
 
-        # 各ページ専用のファイルパス
-        file_path = os.path.join(TEXT_DIR, f"{name}.txt")
+        # 前回の記憶がある場合のみ、変化したか比較
+        if last_hashes:
+            old_hash = last_hashes.get(name, "")
+            if old_hash and old_hash != current_hash:
+                updated_pages.append((name, url))
 
-        if not os.path.exists(file_path):
-            # 初回保存
-            is_first_run = True
-            with open(file_path, "w", encoding="utf-8") as f:
-                f.write(current_text)
-        else:
-            # 前回テキスト読み込みと差分チェック
-            with open(file_path, "r", encoding="utf-8") as f:
-                old_text = f.read()
+    # ハッシュ保存用文字列の作成
+    new_hash_string = ",".join(current_hashes_list)
 
-            added, removed = get_text_diff(old_text, current_text)
-
-            if added or removed:
-                updated_info.append((name, url, added, removed))
-                # 最新状態へ更新保存
-                with open(file_path, "w", encoding="utf-8") as f:
-                    f.write(current_text)
-
-    if is_first_run and not updated_info:
-        print("初回実行：全ページの現在のテキスト状態を保存しました。")
+    # 初回実行時
+    if not last_hashes:
+        print("初回実行：全ページの現在の状態を個別に記憶します。")
+        with open(HASH_FILE, "w", encoding="utf-8") as f:
+            f.write(new_hash_string)
         return
 
-    if updated_info:
-        print(f"更新を検知したページ: {[info[0] for info in updated_info]}")
+    # 更新があった場合
+    if updated_pages:
+        print(f"更新を検知したページ: {[p[0] for p in updated_pages]}")
 
-        for name, url, added, removed in updated_info:
-            diff_msg = f"🔔 **【こみはるオフィシャルサイト更新！】** 🔔\n"
-            diff_msg += f"対象ページ: **{name}**\n🔗 {url}\n\n"
+        # 更新されたページ名を箇条書きにする
+        page_list_str = "\n".join(
+            [f"・**{name}**" for name, url in updated_pages]
+        )
 
-            if added:
-                diff_msg += "🟢 **追加された要素:**\n```\n"
-                diff_msg += "\n".join(added[:10])  # 文字数オーバー防止のため最大10行
-                diff_msg += "\n```\n"
+        # 1番目に更新されたページのURL
+        first_url = updated_pages[0][1]
 
-            if removed:
-                diff_msg += "🔴 **削除された要素:**\n```\n"
-                diff_msg += "\n".join(removed[:10])
-                diff_msg += "\n```\n"
+        message = (
+            f"🔔 **【こみはるオフィシャルサイト更新！】** 🔔\n\n"
+            f"以下のページで新しい更新がありました！\n"
+            f"{page_list_str}\n\n"
+            f"🔗 **更新ページを見に行く**:\n{first_url}"
+        )
 
-            send_discord_notification(diff_msg)
+        send_discord_notification(message)
+
+        # 新しい状態を保存
+        with open(HASH_FILE, "w", encoding="utf-8") as f:
+            f.write(new_hash_string)
     else:
         print("すべてのページで更新はありませんでした。")
 

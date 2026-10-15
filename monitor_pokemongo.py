@@ -22,7 +22,7 @@ HASH_FILE = "last_hash_pokemongo.txt"
 
 
 def get_page_text(url):
-    """フレンド募集一覧（friends-list）の中身だけを取得する"""
+    """フレンド募集リスト（id="friends-list"）の中身だけを抽出して取得する"""
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -36,18 +36,16 @@ def get_page_text(url):
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, "html.parser")
             
-            # id="friends-list" の要素（掲示板のリスト本体）だけを特定
+            # 💡 募集リストのエリア（id="friends-list"）をピンポイントで取得
             friends_list = soup.find(id="friends-list")
             
             if friends_list:
-                # リスト内のスクリプトや広告要素を念のため除去
-                for script in friends_list(["script", "style", "ins"]):
-                    script.extract()
-                
-                # リスト内のテキスト（◯ヶ月前、フレンドコードなど）を取得
+                # リスト内の広告や余計なタグがあれば除外
+                for tag in friends_list(["script", "style", "ins", "iframe"]):
+                    tag.extract()
                 text = friends_list.get_text()
             else:
-                # 万が一見つからなかった場合は全体を取得
+                # 万が一見つからない場合はページ全体から取得
                 text = soup.get_text()
 
             lines = (line.strip() for line in text.splitlines())
@@ -56,6 +54,7 @@ def get_page_text(url):
     except Exception as e:
         print(f"URL取得失敗 ({url}): {e}")
     return ""
+
 
 def send_discord_notification(message):
     payload = {"content": message}
@@ -70,7 +69,6 @@ def main():
         print("エラー: DISCORD_WEBHOOK_URL が設定されていません。")
         return
 
-    # 前回のハッシュ値を読み込む
     last_hashes = {}
     if os.path.exists(HASH_FILE):
         with open(HASH_FILE, "r", encoding="utf-8") as f:
@@ -96,26 +94,23 @@ def main():
 
     new_hash_string = ",".join(current_hashes_list)
 
-    # 初回実行時
     if not last_hashes:
-        print("初回実行：全ページの現在の状態を記憶します。")
+        print("初回実行：ポケモンGOのリスト状態を記憶します。")
         with open(HASH_FILE, "w", encoding="utf-8") as f:
             f.write(new_hash_string)
         return
 
-    # 更新があった場合
     if updated_pages:
         print(f"更新を検知したページ: {[p[0] for p in updated_pages]}")
 
         for name, url in updated_pages:
             message = (
                 f"🎮 **【ポケモンGO フレンド募集更新】** 🎮\n\n"
-                f"国・地域: **{name}** のページで新しい更新がありました！\n\n"
+                f"国・地域: **{name}** のページに新しいフレンドコードが追加されました！\n\n"
                 f"🔗 **ページを見に行く**:\n{url}"
             )
             send_discord_notification(message)
 
-        # 新しい状態を保存
         with open(HASH_FILE, "w", encoding="utf-8") as f:
             f.write(new_hash_string)
     else:

@@ -22,7 +22,7 @@ HASH_FILE = "last_hash_pokemongo.txt"
 
 
 def get_page_text(url):
-    """指定されたURLの主要テキストを取得する"""
+    """フレンド募集一覧（friends-list）の中身だけを取得する"""
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -35,16 +35,27 @@ def get_page_text(url):
         res.encoding = "utf-8"
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, "html.parser")
-            for script in soup(["script", "style", "header", "footer", "nav"]):
-                script.extract()
-            text = soup.get_text()
+            
+            # id="friends-list" の要素（掲示板のリスト本体）だけを特定
+            friends_list = soup.find(id="friends-list")
+            
+            if friends_list:
+                # リスト内のスクリプトや広告要素を念のため除去
+                for script in friends_list(["script", "style", "ins"]):
+                    script.extract()
+                
+                # リスト内のテキスト（◯ヶ月前、フレンドコードなど）を取得
+                text = friends_list.get_text()
+            else:
+                # 万が一見つからなかった場合は全体を取得
+                text = soup.get_text()
+
             lines = (line.strip() for line in text.splitlines())
             chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
             return "\n".join(chunk for chunk in chunks if chunk)
     except Exception as e:
         print(f"URL取得失敗 ({url}): {e}")
     return ""
-
 
 def send_discord_notification(message):
     payload = {"content": message}

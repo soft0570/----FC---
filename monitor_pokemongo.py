@@ -36,16 +36,15 @@ def get_page_text(url):
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, "html.parser")
             
-            # 💡 募集リストのエリア（id="friends-list"）をピンポイントで取得
+            # 募集リストのエリア（id="friends-list"）をピンポイントで取得
             friends_list = soup.find(id="friends-list")
             
             if friends_list:
-                # リスト内の広告や余計なタグがあれば除外
+                # リスト内の広告や余計なタグを除外
                 for tag in friends_list(["script", "style", "ins", "iframe"]):
                     tag.extract()
                 text = friends_list.get_text()
             else:
-                # 万が一見つからない場合はページ全体から取得
                 text = soup.get_text()
 
             lines = (line.strip() for line in text.splitlines())

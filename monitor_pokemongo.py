@@ -22,7 +22,7 @@ HASH_FILE = "last_hash_pokemongo.txt"
 
 
 def get_page_text(url):
-    """フレンド募集リスト（id="friends-list"）の中身だけを抽出して取得する"""
+    """フレンド募集リストから時間経過の表記を除外して取得する"""
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -43,6 +43,11 @@ def get_page_text(url):
                 # リスト内の広告や余計なタグを除外
                 for tag in friends_list(["script", "style", "ins", "iframe"]):
                     tag.extract()
+                
+                # 💡【重要】「◯時間前」「◯日前」などの時間経過テキスト（comment-date）をすべて削除して比較対象から外す
+                for tag in friends_list.find_all(class_=lambda x: x and "comment-date" in x):
+                    tag.extract()
+                
                 text = friends_list.get_text()
             else:
                 text = soup.get_text()
@@ -53,7 +58,6 @@ def get_page_text(url):
     except Exception as e:
         print(f"URL取得失敗 ({url}): {e}")
     return ""
-
 
 def send_discord_notification(message):
     payload = {"content": message}
